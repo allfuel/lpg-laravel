@@ -1,11 +1,11 @@
 # lpg-laravel
 
-`allfuel/lpg-laravel` provides an `artisan lpg` command that starts a local Postgres server for Laravel development, using system binaries or downloading embedded binaries from release artifacts.
+`allfuel/lpg` provides an `artisan lpg` command that starts a local Postgres server for Laravel development, using system binaries or downloading embedded binaries from release artifacts.
 
 ## Install
 
 ```bash
-composer require allfuel/lpg-laravel --dev
+composer require allfuel/lpg --dev
 ```
 
 ## Usage
