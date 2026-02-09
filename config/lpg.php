@@ -17,16 +17,15 @@ return [
     'stop_timeout' => 10,
 
     'embedded' => [
-        'source' => 'github',
         'repo' => 'allfuel/lpg',
         'tag_prefix' => 'v',
         'asset' => '',
         'assets' => [
-            'darwin-arm64v8' => 'postgres-darwin-arm_64.txz',
-            'darwin-amd64' => 'postgres-darwin-amd_64.txz',
-            'linux-amd64' => 'postgres-linux-amd_64.txz',
-            'linux-arm64v8' => 'postgres-linux-arm_64.txz',
-            'windows-amd64' => 'postgres-windows-amd_64.txz',
+            'darwin-arm64v8' => 'postgres-darwin-arm_64.tar.gz',
+            'darwin-amd64' => 'postgres-darwin-x86_64.tar.gz',
+            'linux-amd64' => 'postgres-linux-x86_64.tar.gz',
+            'linux-arm64v8' => 'postgres-linux-arm_64.tar.gz',
+            'windows-amd64' => 'postgres-windows-x86_64.tar.gz',
             'windows-arm64v8' => '',
         ],
     ],

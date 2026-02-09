@@ -15,7 +15,6 @@ class LpgCommand extends Command
         {--log= : Log file (default: config lpg.log)}
         {--pg-version= : Embedded bundle version to download if needed}
         {--platform= : Embedded platform override (e.g. darwin-arm64v8)}
-        {--embedded-source= : Embedded binary source (github or zonky)}
         {--embedded-repo= : GitHub repo (owner/name) for embedded releases}
         {--embedded-tag-prefix= : Git tag prefix (usually "v")}
         {--embedded-asset= : Override GitHub asset filename (defaults based on platform)}
@@ -242,11 +241,6 @@ class LpgCommand extends Command
 
     private function ensureEmbeddedBinaries(string $platform, string $version): string
     {
-        $source = strtolower((string) ($this->option('embedded-source') ?: config('lpg.embedded.source', 'github')));
-        if (! in_array($source, ['github', 'zonky'], true)) {
-            throw new RuntimeException('Invalid --embedded-source. Expected "github" or "zonky".');
-        }
-
         $baseDir = $this->storageBaseDir();
         $installDir = $baseDir.DIRECTORY_SEPARATOR.'embedded'.DIRECTORY_SEPARATOR.$platform.DIRECTORY_SEPARATOR.$version;
         $this->ensureDir($installDir);
@@ -270,11 +264,7 @@ class LpgCommand extends Command
             return $binDir;
         }
 
-        if ($source === 'github') {
-            $this->downloadAndExtractFromGitHub($platform, $version, $installDir);
-        } else {
-            $this->downloadAndExtractFromZonky($platform, $version, $installDir);
-        }
+        $this->downloadAndExtractFromGitHub($platform, $version, $installDir);
 
         $pgCtl = $this->findFirst($installDir, 'pg_ctl');
         if (! $pgCtl && PHP_OS_FAMILY === 'Windows') {
@@ -311,12 +301,15 @@ class LpgCommand extends Command
 
         $tag = $this->buildGitTag($version, $tagPrefix);
         $asset = $assetOverride !== '' ? $assetOverride : $this->defaultGitHubAssetForPlatform($platform);
+        if (! str_ends_with($asset, '.tar.gz')) {
+            throw new RuntimeException('Unsupported GitHub asset type. Expected a .tar.gz asset; set --embedded-asset accordingly.');
+        }
 
         $baseDir = $this->storageBaseDir();
         $downloadsDir = $baseDir.DIRECTORY_SEPARATOR.'downloads'.DIRECTORY_SEPARATOR.'github';
-        $tmpDir = $baseDir.DIRECTORY_SEPARATOR.'tmp'.DIRECTORY_SEPARATOR.uniqid('lpg-', true);
         $this->ensureDir($downloadsDir);
-        $this->ensureDir($tmpDir);
+        $curl = $this->requireSystemCommand('curl', 'Required to download embedded Postgres assets from GitHub.');
+        $tar = $this->requireSystemCommand('tar', 'Required to extract .tar.gz embedded Postgres assets.');
 
         $safeRepo = str_replace(['/', '\\'], '__', $repo);
         $assetPath = $downloadsDir.DIRECTORY_SEPARATOR.$safeRepo.'__'.$tag.'__'.$asset;
@@ -324,29 +317,16 @@ class LpgCommand extends Command
 
         if (! is_file($assetPath)) {
             $this->line("Downloading embedded Postgres bundle from GitHub ({$repo} {$tag})...");
-            $this->runOrThrow(['curl', '-fL', '-o', $assetPath, $url], null);
+            $this->runOrThrow([$curl, '-fL', '-o', $assetPath, $url], null);
         }
 
-        if (str_ends_with($asset, '.txz')) {
-            $this->runOrThrow(['tar', '-xJf', $assetPath, '-C', $installDir], null);
-            return;
+        try {
+            $this->runOrThrow([$tar, '-xzf', $assetPath, '-C', $installDir], null);
+        } catch (\Throwable $e) {
+            throw new RuntimeException(
+                'Failed to extract embedded Postgres asset (.tar.gz). Ensure your tar build supports gzip extraction (-z). '.$e->getMessage()
+            );
         }
-
-        if (str_ends_with($asset, '.jar') || str_ends_with($asset, '.zip')) {
-            $extractDir = $tmpDir.DIRECTORY_SEPARATOR.'asset';
-            $this->ensureDir($extractDir);
-            $this->runOrThrow(['unzip', '-q', '-o', $assetPath, '-d', $extractDir], null);
-
-            $txz = $this->findFirstByExtension($extractDir, 'txz');
-            if (! $txz) {
-                throw new RuntimeException('Downloaded GitHub asset did not contain a .txz payload.');
-            }
-
-            $this->runOrThrow(['tar', '-xJf', $txz, '-C', $installDir], null);
-            return;
-        }
-
-        throw new RuntimeException('Unsupported GitHub asset type. Use --embedded-asset pointing to a .txz or .jar/.zip.');
     }
 
     private function buildGitTag(string $version, string $tagPrefix): string
@@ -380,36 +360,6 @@ class LpgCommand extends Command
         }
 
         throw new RuntimeException("No GitHub asset mapping for platform '{$platform}'. Configure lpg.embedded.assets or provide --embedded-asset.");
-    }
-
-    private function downloadAndExtractFromZonky(string $platform, string $version, string $installDir): void
-    {
-        $baseDir = $this->storageBaseDir();
-        $downloadsDir = $baseDir.DIRECTORY_SEPARATOR.'downloads';
-        $tmpDir = $baseDir.DIRECTORY_SEPARATOR.'tmp'.DIRECTORY_SEPARATOR.uniqid('lpg-', true);
-        $this->ensureDir($downloadsDir);
-        $this->ensureDir($tmpDir);
-
-        $artifact = "embedded-postgres-binaries-{$platform}";
-        $jarName = "{$artifact}-{$version}.jar";
-        $jarPath = $downloadsDir.DIRECTORY_SEPARATOR.$jarName;
-        $url = "https://repo1.maven.org/maven2/io/zonky/test/postgres/{$artifact}/{$version}/{$jarName}";
-
-        if (! is_file($jarPath)) {
-            $this->line("Downloading embedded Postgres binaries from Maven ({$platform} {$version})...");
-            $this->runOrThrow(['curl', '-fL', '-o', $jarPath, $url], null);
-        }
-
-        $jarExtractDir = $tmpDir.DIRECTORY_SEPARATOR.'jar';
-        $this->ensureDir($jarExtractDir);
-        $this->runOrThrow(['unzip', '-q', '-o', $jarPath, '-d', $jarExtractDir], null);
-
-        $txz = $this->findFirstByExtension($jarExtractDir, 'txz');
-        if (! $txz) {
-            throw new RuntimeException('Downloaded jar did not contain a .txz payload (unexpected embedded-postgres-binaries layout).');
-        }
-
-        $this->runOrThrow(['tar', '-xJf', $txz, '-C', $installDir], null);
     }
 
     private function defaultEmbeddedPlatform(): string
@@ -535,6 +485,16 @@ class LpgCommand extends Command
         return $path;
     }
 
+    private function requireSystemCommand(string $name, string $hint): string
+    {
+        $path = $this->which($name);
+        if (! $path) {
+            throw new RuntimeException("Required system command not found: {$name}. {$hint}");
+        }
+
+        return $path;
+    }
+
     private function executableOrNull(string $binDir, string $name): ?string
     {
         $binDir = rtrim($binDir, DIRECTORY_SEPARATOR);
@@ -594,26 +554,6 @@ class LpgCommand extends Command
             }
 
             if ($file->getBasename() === $basename) {
-                return $file->getPathname();
-            }
-        }
-
-        return null;
-    }
-
-    private function findFirstByExtension(string $dir, string $ext): ?string
-    {
-        $ext = ltrim(strtolower($ext), '.');
-        $it = new \RecursiveIteratorIterator(
-            new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS)
-        );
-
-        foreach ($it as $file) {
-            if (! $file->isFile()) {
-                continue;
-            }
-
-            if (strtolower($file->getExtension()) === $ext) {
                 return $file->getPathname();
             }
         }
