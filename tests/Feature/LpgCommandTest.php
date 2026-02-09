@@ -78,3 +78,27 @@ it('rejects non-tar-gz embedded assets before download', function (): void {
         putenv("PATH={$originalPath}");
     }
 });
+
+it('does not use pg_ctl and initdb from PATH when resolving binaries', function (): void {
+    $originalPath = getenv('PATH') ?: '';
+    $fakeBinDir = sys_get_temp_dir().'/lpg-fake-bin-'.uniqid('', true);
+    @mkdir($fakeBinDir, 0777, true);
+
+    file_put_contents($fakeBinDir.'/pg_ctl', "#!/bin/sh\nexit 0\n");
+    file_put_contents($fakeBinDir.'/initdb', "#!/bin/sh\nexit 0\n");
+    @chmod($fakeBinDir.'/pg_ctl', 0755);
+    @chmod($fakeBinDir.'/initdb', 0755);
+
+    putenv("PATH={$fakeBinDir}");
+
+    config()->set('lpg.platform', 'windows-arm64v8');
+    config()->set('lpg.embedded.asset', '');
+    configureTestStorage();
+
+    try {
+        $message = runLpgExpectingFailure(['--port' => '55435']);
+        expect($message)->toContain("No GitHub asset mapping for platform 'windows-arm64v8'");
+    } finally {
+        putenv("PATH={$originalPath}");
+    }
+});

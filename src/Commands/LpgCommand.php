@@ -221,14 +221,6 @@ class LpgCommand extends Command
 
     private function resolveBinDir(): string
     {
-        $systemPgCtl = $this->which('pg_ctl');
-        $systemInitdb = $this->which('initdb');
-
-        if ($systemPgCtl && $systemInitdb) {
-            return dirname($systemPgCtl);
-        }
-
-
         $platform = (string) ($this->option('platform') ?: config('lpg.platform', ''));
         if ($platform === '') {
             $platform = $this->defaultEmbeddedPlatform();
@@ -242,46 +234,38 @@ class LpgCommand extends Command
     private function ensureEmbeddedBinaries(string $platform, string $version): string
     {
         $baseDir = $this->storageBaseDir();
-        $installDir = $baseDir.DIRECTORY_SEPARATOR.'embedded'.DIRECTORY_SEPARATOR.$platform.DIRECTORY_SEPARATOR.$version;
-        $this->ensureDir($installDir);
+        $this->ensureDir($baseDir);
 
-        $cachedBinDir = $installDir.DIRECTORY_SEPARATOR.'.bin-dir';
-        if (is_file($cachedBinDir)) {
-            $binDir = trim((string) @file_get_contents($cachedBinDir));
-            if ($binDir !== '' && $this->executableOrNull($binDir, 'pg_ctl')) {
+        $binDir = $baseDir.DIRECTORY_SEPARATOR.'bin';
+        $markerPath = $baseDir.DIRECTORY_SEPARATOR.'.embedded-version';
+        $marker = $platform.':'.$version;
+
+        if (is_file($markerPath)) {
+            $current = trim((string) @file_get_contents($markerPath));
+            if (
+                $current === $marker
+                && $this->executableOrNull($binDir, 'pg_ctl')
+                && $this->executableOrNull($binDir, 'initdb')
+            ) {
                 return $binDir;
             }
         }
 
-        $existing = $this->findFirst($installDir, 'pg_ctl');
-        if (! $existing && PHP_OS_FAMILY === 'Windows') {
-            $existing = $this->findFirst($installDir, 'pg_ctl.exe');
+        $this->downloadAndExtractFromGitHub($platform, $version, $baseDir);
+
+        if (
+            ! $this->executableOrNull($binDir, 'pg_ctl')
+            || ! $this->executableOrNull($binDir, 'initdb')
+        ) {
+            throw new RuntimeException("Failed to locate required embedded binaries in {$binDir}.");
         }
 
-        if ($existing) {
-            $binDir = dirname($existing);
-            @file_put_contents($cachedBinDir, $binDir);
-            return $binDir;
-        }
-
-        $this->downloadAndExtractFromGitHub($platform, $version, $installDir);
-
-        $pgCtl = $this->findFirst($installDir, 'pg_ctl');
-        if (! $pgCtl && PHP_OS_FAMILY === 'Windows') {
-            $pgCtl = $this->findFirst($installDir, 'pg_ctl.exe');
-        }
-
-        if (! $pgCtl) {
-            throw new RuntimeException('Failed to locate pg_ctl after extracting embedded Postgres binaries.');
-        }
-
-        $binDir = dirname($pgCtl);
-        @file_put_contents($cachedBinDir, $binDir);
+        @file_put_contents($markerPath, $marker);
 
         return $binDir;
     }
 
-    private function downloadAndExtractFromGitHub(string $platform, string $version, string $installDir): void
+    private function downloadAndExtractFromGitHub(string $platform, string $version, string $baseDir): void
     {
         $repo = (string) ($this->option('embedded-repo') ?: config('lpg.embedded.repo', 'allfuel/lpg'));
 
@@ -305,7 +289,6 @@ class LpgCommand extends Command
             throw new RuntimeException('Unsupported GitHub asset type. Expected a .tar.gz asset; set --embedded-asset accordingly.');
         }
 
-        $baseDir = $this->storageBaseDir();
         $downloadsDir = $baseDir.DIRECTORY_SEPARATOR.'downloads'.DIRECTORY_SEPARATOR.'github';
         $this->ensureDir($downloadsDir);
         $curl = $this->requireSystemCommand('curl', 'Required to download embedded Postgres assets from GitHub.');
@@ -344,12 +327,36 @@ class LpgCommand extends Command
             );
         }
 
+        $stagingDir = $baseDir.DIRECTORY_SEPARATOR.'.extract-'.uniqid('', true);
+        $this->ensureDir($stagingDir);
+
         try {
-            $this->runOrThrow([$tar, '-xzf', $assetPath, '-C', $installDir], null);
-        } catch (\Throwable $e) {
-            throw new RuntimeException(
-                'Failed to extract embedded Postgres asset (.tar.gz). Ensure your tar build supports gzip extraction (-z). '.$e->getMessage()
-            );
+            try {
+                $this->runOrThrow([$tar, '-xzf', $assetPath, '-C', $stagingDir], null);
+            } catch (\Throwable $e) {
+                throw new RuntimeException(
+                    'Failed to extract embedded Postgres asset (.tar.gz). Ensure your tar build supports gzip extraction (-z). '.$e->getMessage()
+                );
+            }
+
+            $pgCtl = $this->findFirst($stagingDir, 'pg_ctl');
+            if (! $pgCtl && PHP_OS_FAMILY === 'Windows') {
+                $pgCtl = $this->findFirst($stagingDir, 'pg_ctl.exe');
+            }
+
+            if (! $pgCtl) {
+                throw new RuntimeException('Failed to locate pg_ctl in extracted embedded Postgres asset.');
+            }
+
+            $sourceBinDir = dirname($pgCtl);
+            if (basename($sourceBinDir) !== 'bin') {
+                throw new RuntimeException("Unexpected embedded archive layout; expected pg_ctl under a bin/ directory, found {$sourceBinDir}.");
+            }
+
+            $sourceRoot = dirname($sourceBinDir);
+            $this->replaceEmbeddedRuntime($baseDir, $sourceRoot, basename($stagingDir));
+        } finally {
+            $this->removePath($stagingDir);
         }
     }
 
@@ -603,6 +610,85 @@ class LpgCommand extends Command
         }
 
         return null;
+    }
+
+    private function replaceEmbeddedRuntime(string $baseDir, string $sourceRoot, string $stagingDirName): void
+    {
+        $keep = [
+            'downloads',
+            $stagingDirName,
+        ];
+
+        $baseEntries = new \DirectoryIterator($baseDir);
+        foreach ($baseEntries as $entry) {
+            if ($entry->isDot()) {
+                continue;
+            }
+
+            $name = $entry->getFilename();
+            if (in_array($name, $keep, true)) {
+                continue;
+            }
+
+            $this->removePath($entry->getPathname());
+        }
+
+        $sourceEntries = new \DirectoryIterator($sourceRoot);
+        foreach ($sourceEntries as $entry) {
+            if ($entry->isDot()) {
+                continue;
+            }
+
+            $name = $entry->getFilename();
+            if ($name === 'downloads') {
+                continue;
+            }
+
+            $from = $entry->getPathname();
+            $to = $baseDir.DIRECTORY_SEPARATOR.$name;
+            if (! @rename($from, $to)) {
+                throw new RuntimeException("Failed to move embedded runtime entry: {$from} -> {$to}");
+            }
+        }
+    }
+
+    private function removePath(string $path): void
+    {
+        if (! is_file($path) && ! is_dir($path) && ! is_link($path)) {
+            return;
+        }
+
+        if (is_file($path) || is_link($path)) {
+            if (! @unlink($path) && (is_file($path) || is_link($path))) {
+                throw new RuntimeException("Failed to remove file: {$path}");
+            }
+
+            return;
+        }
+
+        $it = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::CHILD_FIRST
+        );
+
+        foreach ($it as $node) {
+            $target = $node->getPathname();
+            if ($node->isDir()) {
+                if (! @rmdir($target) && is_dir($target)) {
+                    throw new RuntimeException("Failed to remove directory: {$target}");
+                }
+
+                continue;
+            }
+
+            if (! @unlink($target) && is_file($target)) {
+                throw new RuntimeException("Failed to remove file: {$target}");
+            }
+        }
+
+        if (! @rmdir($path) && is_dir($path)) {
+            throw new RuntimeException("Failed to remove directory: {$path}");
+        }
     }
 
     private function storageBaseDir(): string

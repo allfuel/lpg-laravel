@@ -1,6 +1,6 @@
 # lpg-laravel
 
-`allfuel/lpg` provides an `artisan lpg` command that starts a local Postgres server for Laravel development, using system binaries or downloading embedded binaries from release artifacts.
+`allfuel/lpg` provides an `artisan lpg` command that starts a local Postgres server for Laravel development, downloading embedded binaries from release artifacts.
 
 ## Install
 
@@ -46,6 +46,7 @@ When using embedded binaries from GitHub releases, `lpg` expects:
 - `tar` with gzip support (`-z`) to extract `.tar.gz` assets
 
 Only `.tar.gz` embedded assets are supported.
+The active embedded runtime is materialized under `storage/pg`, with executables at `storage/pg/bin`.
 
 ## Testing
 
