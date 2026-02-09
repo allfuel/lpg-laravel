@@ -1,0 +1,27 @@
+{
+    "name": "allfuel/lpg-laravel",
+    "description": "Embedded Postgres command for Laravel applications.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["laravel", "postgres", "embedded", "artisan"],
+    "require": {
+        "php": "^8.2",
+        "illuminate/console": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "symfony/process": "^7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fuel\\Lpg\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Fuel\\Lpg\\LpgServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
