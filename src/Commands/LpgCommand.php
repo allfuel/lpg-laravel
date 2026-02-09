@@ -234,7 +234,7 @@ class LpgCommand extends Command
             $platform = $this->defaultEmbeddedPlatform();
         }
 
-        $version = (string) ($this->option('pg-version') ?: config('lpg.version', '18.1-pgvector0.8.1'));
+        $version = (string) ($this->option('pg-version') ?: config('lpg.version', '18.1-pgvector0.8.1-targz'));
 
         return $this->ensureEmbeddedBinaries($platform, $version);
     }
@@ -312,12 +312,36 @@ class LpgCommand extends Command
         $tar = $this->requireSystemCommand('tar', 'Required to extract .tar.gz embedded Postgres assets.');
 
         $safeRepo = str_replace(['/', '\\'], '__', $repo);
-        $assetPath = $downloadsDir.DIRECTORY_SEPARATOR.$safeRepo.'__'.$tag.'__'.$asset;
-        $url = "https://github.com/{$repo}/releases/download/{$tag}/{$asset}";
+        $assetPath = null;
+        $attemptedTags = $this->candidateGitTags($tag, $asset);
+        $lastError = '';
 
-        if (! is_file($assetPath)) {
-            $this->line("Downloading embedded Postgres bundle from GitHub ({$repo} {$tag})...");
-            $this->runOrThrow([$curl, '-fL', '-o', $assetPath, $url], null);
+        foreach ($attemptedTags as $candidateTag) {
+            $candidateAssetPath = $downloadsDir.DIRECTORY_SEPARATOR.$safeRepo.'__'.$candidateTag.'__'.$asset;
+            $url = "https://github.com/{$repo}/releases/download/{$candidateTag}/{$asset}";
+
+            if (! is_file($candidateAssetPath)) {
+                $this->line("Downloading embedded Postgres bundle from GitHub ({$repo} {$candidateTag})...");
+
+                try {
+                    $this->runOrThrow([$curl, '-fL', '-o', $candidateAssetPath, $url], null);
+                } catch (\Throwable $e) {
+                    $lastError = $e->getMessage();
+                    continue;
+                }
+            }
+
+            $assetPath = $candidateAssetPath;
+            break;
+        }
+
+        if (! is_string($assetPath)) {
+            $attempts = implode(', ', $attemptedTags);
+            throw new RuntimeException(
+                'Failed to download embedded Postgres asset from GitHub. Attempted tags: '
+                .$attempts
+                .($lastError !== '' ? ". Last error: {$lastError}" : '.')
+            );
         }
 
         try {
@@ -347,6 +371,26 @@ class LpgCommand extends Command
         }
 
         return $tagPrefix.$version;
+    }
+
+    /**
+     * Prefer the configured tag and keep compatibility with tar.gz migration tags.
+     *
+     * @return list<string>
+     */
+    private function candidateGitTags(string $tag, string $asset): array
+    {
+        $tags = [$tag];
+
+        if (str_ends_with($asset, '.tar.gz')) {
+            if (str_ends_with($tag, '-targz')) {
+                $tags[] = substr($tag, 0, -strlen('-targz'));
+            } else {
+                $tags[] = $tag.'-targz';
+            }
+        }
+
+        return array_values(array_unique($tags));
     }
 
     private function defaultGitHubAssetForPlatform(string $platform): string

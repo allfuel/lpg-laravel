@@ -12,3 +12,9 @@ it('defines known embedded asset mappings', function (): void {
         'windows-arm64v8',
     ]);
 });
+
+it('defaults to the tar.gz embedded release version', function (): void {
+    $config = require __DIR__.'/../../config/lpg.php';
+
+    expect($config['version'])->toBe('18.1-pgvector0.8.1-targz');
+});

@@ -12,7 +12,7 @@ return [
     'username' => env('DB_USERNAME', 'postgres'),
     'password' => env('DB_PASSWORD', ''),
 
-    'version' => '18.1-pgvector0.8.1',
+    'version' => '18.1-pgvector0.8.1-targz',
     'platform' => '',
     'stop_timeout' => 10,
 
