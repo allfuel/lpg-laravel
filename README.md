@@ -11,13 +11,17 @@ composer require allfuel/lpg-laravel --dev
 ## Usage
 
 Add it to your `composer.json` for `dev`. It will then always be available using the port in your `.env`.
+
+e.g.
 ```json
-        "dev": [
-            "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#34d399,#c4b5fd,#fb7185,#fdba74\" \"php artisan lpg\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=lpg,server,queue,logs,vite --kill-others"
-        ],
+"dev": [
+    "Composer\\Config::disableProcessTimeout",
+    "npx concurrently -c \"#93c5fd,#34d399,#c4b5fd,#fb7185,#fdba74\" \"php artisan lpg\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=lpg,server,queue,logs,vite --kill-others"
+],
 ```
 
+
+Or run it manually:
 ```bash
 php artisan lpg [--port=5455]
 ```
