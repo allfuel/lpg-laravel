@@ -101,7 +101,7 @@ class LpgCommand extends Command
             $runningPort = $this->readPortFromPid($dataDir);
             if ($runningPort !== null && $runningPort !== $port) {
                 $this->error("Postgres is already running for {$dataDir} on port {$runningPort}, but --port/config is {$port}.");
-                $this->line('Stop the existing instance or change LPG_PORT/DB_PORT to match.');
+                $this->line('Stop the existing instance or change DB_PORT to match.');
                 return self::FAILURE;
             }
 
@@ -111,7 +111,7 @@ class LpgCommand extends Command
                 $p->run();
                 if (! $p->isSuccessful()) {
                     $this->error("Postgres is running for {$dataDir} but is not accepting connections on {$host}:{$port}.");
-                    $this->line('Stop the existing instance or change LPG_PORT/DB_PORT to match.');
+                    $this->line('Stop the existing instance or change DB_PORT to match.');
                     return self::FAILURE;
                 }
             }
@@ -121,7 +121,7 @@ class LpgCommand extends Command
             $weStarted = false;
         } else {
             if (! $this->isTcpPortAvailable($host, $port)) {
-                $this->error("Port {$port} is already in use. Set LPG_PORT/DB_PORT to a free port and try again.");
+                $this->error("Port {$port} is already in use. Set DB_PORT to a free port and try again.");
                 return self::FAILURE;
             }
 
@@ -145,7 +145,7 @@ class LpgCommand extends Command
         }
 
         if ($database !== 'postgres') {
-            $this->warn("DB_DATABASE/LPG_DATABASE is set to '{$database}'. This command does not create databases; use postgres or create it yourself.");
+            $this->warn("DB_DATABASE is set to '{$database}'. This command does not create databases; use postgres or create it yourself.");
         }
 
         $this->printConnectionInfo($host, $port, $database, $username, $password);
@@ -164,12 +164,12 @@ class LpgCommand extends Command
         }
 
         if (! ctype_digit($raw)) {
-            throw new RuntimeException('Invalid --port/LPG_PORT/DB_PORT; expected 1..65535.');
+            throw new RuntimeException('Invalid --port/DB_PORT; expected 1..65535.');
         }
 
         $port = (int) $raw;
         if ($port <= 0 || $port > 65535) {
-            throw new RuntimeException('Invalid --port/LPG_PORT/DB_PORT; expected 1..65535.');
+            throw new RuntimeException('Invalid --port/DB_PORT; expected 1..65535.');
         }
 
         return $port;
