@@ -14,7 +14,6 @@ return [
 
     'version' => '18.1-pgvector0.8.1',
     'platform' => '',
-    'use_system' => false,
     'stop_timeout' => 10,
 
     'embedded' => [

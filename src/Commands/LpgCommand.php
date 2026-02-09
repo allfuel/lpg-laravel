@@ -19,7 +19,6 @@ class LpgCommand extends Command
         {--embedded-repo= : GitHub repo (owner/name) for embedded releases}
         {--embedded-tag-prefix= : Git tag prefix (usually "v")}
         {--embedded-asset= : Override GitHub asset filename (defaults based on platform)}
-        {--use-system : Require system pg_ctl/initdb; do not download}
         {--stop-timeout= : Seconds to wait for stop before giving up}';
 
     protected $description = 'Start a local Postgres server for development and stop it on exit.';
@@ -40,12 +39,8 @@ class LpgCommand extends Command
         $this->ensureDir(dirname($logPath));
         $this->ensureDir($dataDir);
 
-        $useSystemOnly = (bool) config('lpg.use_system', false);
-        if ((bool) $this->option('use-system')) {
-            $useSystemOnly = true;
-        }
 
-        $binDir = $this->resolveBinDir($useSystemOnly);
+        $binDir = $this->resolveBinDir();
 
         $pgCtl = $this->requireExecutable($binDir, 'pg_ctl');
         $initdb = $this->requireExecutable($binDir, 'initdb');
@@ -225,7 +220,7 @@ class LpgCommand extends Command
         $this->line('');
     }
 
-    private function resolveBinDir(bool $useSystemOnly): string
+    private function resolveBinDir(): string
     {
         $systemPgCtl = $this->which('pg_ctl');
         $systemInitdb = $this->which('initdb');
@@ -234,9 +229,6 @@ class LpgCommand extends Command
             return dirname($systemPgCtl);
         }
 
-        if ($useSystemOnly) {
-            throw new RuntimeException('pg_ctl/initdb not found on PATH. Install Postgres (or run without --use-system to download embedded binaries).');
-        }
 
         $platform = (string) ($this->option('platform') ?: config('lpg.platform', ''));
         if ($platform === '') {
@@ -445,7 +437,7 @@ class LpgCommand extends Command
             return 'windows-amd64';
         }
 
-        throw new RuntimeException("Unsupported OS for embedded Postgres download: {$os}. Install Postgres and use --use-system.");
+        throw new RuntimeException("Unsupported OS for embedded Postgres download: {$os}. Install Postgres so pg_ctl and initdb are on PATH.");
     }
 
     private function isInitialized(string $dataDir): bool
