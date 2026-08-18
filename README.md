@@ -1,4 +1,4 @@
-# lpg-laravel
+# fueldotbuild/lpg
 
 `fueldotbuild/lpg` provides an `artisan lpg` command that starts a local Postgres server for Laravel development, downloading embedded binaries from release artifacts.
 
