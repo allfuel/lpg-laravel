@@ -498,28 +498,34 @@ class LpgCommand extends Command
 
     private function which(string $binary): ?string
     {
+        if ($binary === '') {
+            return null;
+        }
+
+        $path = getenv('PATH');
+        if (! is_string($path) || $path === '') {
+            return null;
+        }
+
+        $extensions = [''];
         if (PHP_OS_FAMILY === 'Windows') {
-            $process = new Process(['where', $binary]);
-        } else {
-            $process = new Process(['sh', '-lc', 'command -v '.escapeshellarg($binary)]);
+            $pathExt = getenv('PATHEXT');
+            $extensions = is_string($pathExt) && $pathExt !== ''
+                ? array_merge([''], array_filter(explode(PATH_SEPARATOR, $pathExt)))
+                : ['', '.exe', '.bat', '.cmd'];
         }
 
-        $process->setTimeout(2);
-        $process->run();
+        foreach (explode(PATH_SEPARATOR, $path) as $dir) {
+            $dir = $dir !== '' ? $dir : getcwd();
+            if (! is_string($dir) || $dir === '') {
+                continue;
+            }
 
-        if (! $process->isSuccessful()) {
-            return null;
-        }
-
-        $output = trim(str_replace("\r", "\n", $process->getOutput()));
-        if ($output === '') {
-            return null;
-        }
-
-        foreach (preg_split('/\n+/', $output) as $line) {
-            $path = trim((string) $line);
-            if ($path !== '' && is_file($path)) {
-                return $path;
+            foreach ($extensions as $extension) {
+                $candidate = rtrim($dir, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.$binary.$extension;
+                if (is_file($candidate) && is_executable($candidate)) {
+                    return $candidate;
+                }
             }
         }
 
