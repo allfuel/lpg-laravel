@@ -37,7 +37,7 @@ composer create-project laravel/laravel "${APP_DIR}" --no-interaction
 cd "${APP_DIR}"
 
 composer config repositories.lpg path "${REPO_ROOT}"
-composer require --dev allfuel/lpg:@dev --no-interaction
+composer require --dev fueldotbuild/lpg:@dev --no-interaction
 
 mkdir -p "${FAKEBIN_DIR}"
 cat > "${FAKEBIN_DIR}/pg_ctl" <<'EOF'

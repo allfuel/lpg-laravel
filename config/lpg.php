@@ -17,7 +17,7 @@ return [
     'stop_timeout' => 10,
 
     'embedded' => [
-        'repo' => 'allfuel/lpg',
+        'repo' => 'fueldotbuild/lpg',
         'tag_prefix' => 'v',
         'asset' => '',
         'assets' => [

@@ -267,7 +267,7 @@ class LpgCommand extends Command
 
     private function downloadAndExtractFromGitHub(string $platform, string $version, string $baseDir): void
     {
-        $repo = (string) ($this->option('embedded-repo') ?: config('lpg.embedded.repo', 'allfuel/lpg'));
+        $repo = (string) ($this->option('embedded-repo') ?: config('lpg.embedded.repo', 'fueldotbuild/lpg'));
 
         $tagPrefixOption = $this->option('embedded-tag-prefix');
         $tagPrefix = $tagPrefixOption !== null

@@ -1,5 +1,5 @@
 {
-    "name": "allfuel/lpg",
+    "name": "fueldotbuild/lpg",
     "description": "Embedded Postgres command for Laravel applications.",
     "type": "library",
     "license": "MIT",
